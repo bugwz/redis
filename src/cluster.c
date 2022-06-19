@@ -6729,6 +6729,8 @@ clusterNode *getNodeByQuery(client *c, struct redisCommand *cmd, robj **argv, in
             /* Fall through and allow the command to be executed:
              * this happens when server.cluster_allow_reads_when_down is
              * true and the command is not a write command */
+            // 忽略并允许执行命令：这发生在服务器。
+            // server.cluster_allow_reads_when_down 为true且该命令不是写入命令
         }
     }
 
@@ -6738,11 +6740,14 @@ clusterNode *getNodeByQuery(client *c, struct redisCommand *cmd, robj **argv, in
     /* MIGRATE always works in the context of the local node if the slot
      * is open (migrating or importing state). We need to be able to freely
      * move keys among instances in this case. */
+    // 如果插槽处于打开状态（迁移或导入状态），则迁移始终在本地节点的上下文中工作。
+    // 在这种情况下，我们需要能够在实例之间自由移动关键点。
     if ((migrating_slot || importing_slot) && cmd->proc == migrateCommand)
         return myself;
 
     /* If we don't have all the keys and we are migrating the slot, send
      * an ASK redirection. */
+    // 如果没有所有密钥，并且正在迁移插槽，请发送ASK重定向。
     if (migrating_slot && missing_keys) {
         if (error_code) *error_code = CLUSTER_REDIR_ASK;
         return server.cluster->migrating_slots_to[slot];
@@ -6752,6 +6757,8 @@ clusterNode *getNodeByQuery(client *c, struct redisCommand *cmd, robj **argv, in
      * request as "ASKING", we can serve the request. However if the request
      * involves multiple keys and we don't have them all, the only option is
      * to send a TRYAGAIN error. */
+    // 如果我们正在接收插槽，并且客户机正确地将请求标记为“正在询问”，那么我们可以为请求提供服务。
+    // 但是，如果请求涉及多个密钥，而我们没有全部密钥，那么唯一的选择就是发送一个TRYAGAIN错误。
     if (importing_slot &&
         (c->flags & CLIENT_ASKING || cmd->flags & CMD_ASKING))
     {
