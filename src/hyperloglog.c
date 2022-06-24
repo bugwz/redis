@@ -182,12 +182,13 @@
 struct hllhdr {
     char magic[4];      /* "HYLL" */
     uint8_t encoding;   /* HLL_DENSE or HLL_SPARSE. */
-    uint8_t notused[3]; /* Reserved for future use, must be zero. */
-    uint8_t card[8];    /* Cached cardinality, little endian. */
+    uint8_t notused[3]; /* Reserved for future use, must be zero. */  // 保留供将来使用，必须为零。
+    uint8_t card[8];    /* Cached cardinality, little endian. */ // 缓存基数，小endian。
     uint8_t registers[]; /* Data bytes. */
 };
 
 /* The cached cardinality MSB is used to signal validity of the cached value. */
+// 缓存基数MSB用于表示缓存值的有效性
 #define HLL_INVALIDATE_CACHE(hdr) (hdr)->card[7] |= (1<<7)
 #define HLL_VALID_CACHE(hdr) (((hdr)->card[7] & (1<<7)) == 0)
 
@@ -200,9 +201,9 @@ struct hllhdr {
 #define HLL_REGISTER_MAX ((1<<HLL_BITS)-1)
 #define HLL_HDR_SIZE sizeof(struct hllhdr)
 #define HLL_DENSE_SIZE (HLL_HDR_SIZE+((HLL_REGISTERS*HLL_BITS+7)/8))
-#define HLL_DENSE 0 /* Dense encoding. */
-#define HLL_SPARSE 1 /* Sparse encoding. */
-#define HLL_RAW 255 /* Only used internally, never exposed. */
+#define HLL_DENSE 0 /* Dense encoding. */ // 密集编码
+#define HLL_SPARSE 1 /* Sparse encoding. */ // 稀疏编码
+#define HLL_RAW 255 /* Only used internally, never exposed. */ // 仅在内部使用，从不暴露
 #define HLL_MAX_ENCODING 1
 
 static char *invalid_hll_err = "-INVALIDOBJ Corrupted HLL object detected";
@@ -523,6 +524,8 @@ void hllDenseRegHisto(uint8_t *registers, int* reghisto) {
     /* Redis default is to use 16384 registers 6 bits each. The code works
      * with other values by modifying the defines, but for our target value
      * we take a faster path with unrolled loops. */
+    // Redis默认使用16384寄存器，每个寄存器6位。
+    // 代码通过修改定义来处理其他值，但对于我们的目标值，我们使用展开循环的更快路径。
     if (HLL_REGISTERS == 16384 && HLL_BITS == 6) {
         uint8_t *r = registers;
         unsigned long r0, r1, r2, r3, r4, r5, r6, r7, r8, r9,
@@ -1011,6 +1014,14 @@ double hllTau(double x) {
  * is, hdr->registers will point to an uint8_t array of HLL_REGISTERS element.
  * This is useful in order to speedup PFCOUNT when called against multiple
  * keys (no need to work with 6-bit integers encoding). */
+
+// 根据寄存器值的调和平均值返回集合的近似基数。”hdr’指向SDS的开头，SDS表示持有HLL表示的String对象。
+
+// 如果HLL对象的稀疏表示无效，则“invalid”所指的整数将设置为非零，否则将保持不变。
+
+// hllCount（）支持对HLL\U RAW进行特殊的仅内部编码，即hdr->寄存器将指向HLL\U寄存器元素的uint8\t数组。
+// 当针对多个键调用PFCOUNT时，这对于加快PFCOUNT非常有用（无需使用6位整数编码）。
+
 uint64_t hllCount(struct hllhdr *hdr, int *invalid) {
     double m = HLL_REGISTERS;
     double E;
@@ -1020,9 +1031,12 @@ uint64_t hllCount(struct hllhdr *hdr, int *invalid) {
      * able to return. However it is slow to check for sanity of the
      * input: instead we history array at a safe size: overflows will
      * just write data to wrong, but correctly allocated, places. */
+    // 请注意，reghisto大小可能只是HLL_Q+2，因为HLL_Q+1是哈希函数能够返回的“000…1”序列的最大频率。
+    // 然而，检查输入的健全性很慢：相反，我们以安全的大小记录数组：溢出只会将数据写入错误但分配正确的位置。
     int reghisto[64] = {0};
 
     /* Compute register histogram */
+    // 计算寄存器直方图
     if (hdr->encoding == HLL_DENSE) {
         hllDenseRegHisto(hdr->registers,reghisto);
     } else if (hdr->encoding == HLL_SPARSE) {
@@ -1037,6 +1051,7 @@ uint64_t hllCount(struct hllhdr *hdr, int *invalid) {
     /* Estimate cardinality from register histogram. See:
      * "New cardinality estimation algorithms for HyperLogLog sketches"
      * Otmar Ertl, arXiv:1702.01284 */
+    // 根据寄存器直方图估计基数。参见：“HyperLogLog草图的新基数估计算法”Otmar Ertl，arXiv:1702.01284
     double z = m * hllTau((m-reghisto[HLL_Q+1])/(double)m);
     for (j = HLL_Q; j >= 1; --j) {
         z += reghisto[j];
@@ -1266,19 +1281,29 @@ void pfcountCommand(client *c) {
      * logically expired key on a replica is deleted, while with lookupKeyRead
      * it isn't, but the lookup returns NULL either way if the key is logically
      * expired, which is what matters here. */
+
+    // 用户指定了单个密钥。返回缓存值或计算一个值并更新缓存。
+    // 由于HLL是常规Redis字符串类型的值，因此更新缓存会修改该值。
+    // 无论如何，我们都要执行lookupKeyRead，因为它被标记为只读命令。
+    // 不同之处在于，使用lookupKeyWrite时，副本上逻辑过期的密钥会被删除，
+    // 而使用lookupKeyRead时不会被删除，但如果密钥逻辑过期，
+    // 则查找会以任何方式返回NULL，这在这里很重要。
     o = lookupKeyRead(c->db,c->argv[1]);
     if (o == NULL) {
         /* No key? Cardinality is zero since no element was added, otherwise
          * we would have a key as HLLADD creates it as a side effect. */
+        // 没有钥匙？基数为零，因为没有添加任何元素，否则我们将有一个键，因为HLLADD将其创建为副作用。
         addReply(c,shared.czero);
     } else {
         if (isHLLObjectOrReply(c,o) != C_OK) return;
         o = dbUnshareStringValue(c->db,c->argv[1],o);
 
         /* Check if the cached cardinality is valid. */
+        // 检查缓存的基数是否有效
         hdr = o->ptr;
         if (HLL_VALID_CACHE(hdr)) {
             /* Just return the cached value. */
+            // 只需返回缓存的值
             card = (uint64_t)hdr->card[0];
             card |= (uint64_t)hdr->card[1] << 8;
             card |= (uint64_t)hdr->card[2] << 16;
@@ -1290,6 +1315,7 @@ void pfcountCommand(client *c) {
         } else {
             int invalid = 0;
             /* Recompute it and update the cached value. */
+            // 重新计算并更新缓存的值
             card = hllCount(hdr,&invalid);
             if (invalid) {
                 addReplyError(c,invalid_hll_err);
@@ -1377,6 +1403,7 @@ void pfmergeCommand(client *c) {
     }
     hdr = o->ptr; /* o->ptr may be different now, as a side effect of
                      last hllSparseSet() call. */
+    // o->ptr现在可能不同了，这是上次hllSparseSet（）调用的副作用。
     HLL_INVALIDATE_CACHE(hdr);
 
     signalModifiedKey(c,c->db,c->argv[1]);
