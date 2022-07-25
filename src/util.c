@@ -696,7 +696,7 @@ int ld2string(char *buf, size_t len, long double value, ld2string_mode mode) {
  * This function is not thread safe, since the state is global. */
 void getRandomBytes(unsigned char *p, size_t len) {
     /* Global state. */
-    static int seed_initialized = 0;
+    static int seed_initialized = 0; //默认为0
     static unsigned char seed[64]; /* 512 bit internal block size. */
     static uint64_t counter = 0; /* The counter we hash with the seed. */
 
@@ -705,6 +705,8 @@ void getRandomBytes(unsigned char *p, size_t len) {
          * the same seed with a progressive counter. For the goals of this
          * function we just need non-colliding strings, there are no
          * cryptographic security needs. */
+        // 在计数器模式下使用SHA1初始化一个种子。
+
         FILE *fp = fopen("/dev/urandom","r");
         if (fp == NULL || fread(seed,sizeof(seed),1,fp) != 1) {
             /* Revert to a weaker seed, and in this case reseed again
@@ -762,6 +764,8 @@ void getRandomBytes(unsigned char *p, size_t len) {
  * given execution of Redis, so that if you are talking with an instance
  * having run_id == A, and you reconnect and it has run_id == B, you can be
  * sure that it is either a different instance or it was restarted. */
+// 生成node id
+// TODO: 如何保证唯一？？？
 void getRandomHexChars(char *p, size_t len) {
     char *charset = "0123456789abcdef";
     size_t j;

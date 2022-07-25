@@ -579,6 +579,7 @@ void punsubscribeCommand(client *c) {
  * Used by the commands PUBLISH/SPUBLISH and their respective module APIs.*/
 int pubsubPublishMessageAndPropagateToCluster(robj *channel, robj *message, int sharded) {
     int receivers = pubsubPublishMessage(channel, message, sharded);
+    // 将消息同步给从库？
     if (server.cluster_enabled)
         clusterPropagatePublish(channel, message, sharded);
     return receivers;

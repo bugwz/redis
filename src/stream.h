@@ -8,9 +8,11 @@
  * a sequence counter. IDs generated in the same millisecond (or in a past
  * millisecond if the clock jumped backward) will use the millisecond time
  * of the latest generated ID and an incremented sequence. */
+// 流项ID：由毫秒时间和序列计数器组成的128位数字。
+// 在同一毫秒内生成的ID（如果时钟向后跳，则在过去的毫秒内生成）将使用最新生成的ID的毫秒时间和递增序列。
 typedef struct streamID {
-    uint64_t ms;        /* Unix time in milliseconds. */
-    uint64_t seq;       /* Sequence number. */
+    uint64_t ms;        /* Unix time in milliseconds. */ // 毫秒
+    uint64_t seq;       /* Sequence number. */ // 递增id
 } streamID;
 
 typedef struct stream {
@@ -67,9 +69,12 @@ typedef struct streamCG {
                                as processed. The key of the radix tree is the
                                ID as a 64 bit big endian number, while the
                                associated value is a streamNACK structure.*/
+                               // 待处理条目列表。这是一个基数树，它将每个尚未确认为已处理的消息传递给消费者
+                               // （不带NOACK选项）。基数树的键是作为64位大端数的ID，而相关值是streamNACK结构
     rax *consumers;         /* A radix tree representing the consumers by name
                                and their associated representation in the form
                                of streamConsumer structures. */
+                               // 按名称表示消费者的基树及其以streamConsumer结构形式的关联表示
 } streamCG;
 
 /* A specific consumer in a consumer group.  */
@@ -85,6 +90,9 @@ typedef struct streamConsumer {
                                    the same streamNACK structure referenced
                                    in the "pel" of the consumer group structure
                                    itself, so the value is shared. */
+                                   // 特定于消费者的待定条目列表：发送到此消费者的所有待定消息尚未确认。
+                                   // 键是大端消息ID，而值是消费者组结构本身的“pel”中引用的相同streamNACK结构，
+                                   // 因此值是共享的.
 } streamConsumer;
 
 /* Pending (yet not acknowledged) message in a consumer group. */

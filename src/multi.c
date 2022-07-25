@@ -281,6 +281,7 @@ void watchForKey(client *c, robj *key) {
             return; /* Key already watched */
     }
     /* This key is not already watched in this DB. Let's add it */
+    // 这个key还没有被watch，让我们创建一个客户端列表后添加它。
     clients = dictFetchValue(c->db->watched_keys,key);
     if (!clients) {
         clients = listCreate();
@@ -441,6 +442,7 @@ void touchAllWatchedKeysInDb(redisDb *emptied, redisDb *replaced_with) {
 void watchCommand(client *c) {
     int j;
 
+    // multi内部的watch是不被允许的
     if (c->flags & CLIENT_MULTI) {
         addReplyError(c,"WATCH inside MULTI is not allowed");
         return;
@@ -457,6 +459,7 @@ void watchCommand(client *c) {
 
 void unwatchCommand(client *c) {
     unwatchAllKeys(c);
+    // 取消掉当前客户端的 CLIENT_DIRTY_CAS 标记
     c->flags &= (~CLIENT_DIRTY_CAS);
     addReply(c,shared.ok);
 }

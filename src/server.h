@@ -311,7 +311,7 @@ extern int configOOMScoreAdjValuesDefaults[CONFIG_OOM_COUNT];
 #define CLIENT_MONITOR (1<<2) /* This client is a slave monitor, see MONITOR */
 #define CLIENT_MULTI (1<<3)   /* This client is in a MULTI context */
 #define CLIENT_BLOCKED (1<<4) /* The client is waiting in a blocking operation */
-#define CLIENT_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */
+#define CLIENT_DIRTY_CAS (1<<5) /* Watched keys modified. EXEC will fail. */ // 监控的key被修改了，exec执行将会失败
 #define CLIENT_CLOSE_AFTER_REPLY (1<<6) /* Close after writing entire reply. */
 #define CLIENT_UNBLOCKED (1<<7) /* This client was unblocked and is stored in
                                   server.unblocked_clients */
@@ -1113,7 +1113,7 @@ typedef struct client {
     time_t ctime;           /* Client creation time. */
     long duration;          /* Current command duration. Used for measuring latency of blocking/non-blocking cmds */
     int slot;               /* The slot the client is executing against. Set to -1 if no slot is being used */
-    time_t lastinteraction; /* Time of the last interaction, used for timeout */
+    time_t lastinteraction; /* Time of the last interaction, used for timeout */ // 上次互动时间
     time_t obuf_soft_limit_reached_time;
     int authenticated;      /* Needed when the default user requires auth. */
     int replstate;          /* Replication state if this is a slave. */
@@ -1865,17 +1865,17 @@ struct redisServer {
     struct clusterState *cluster;  /* State of the cluster */
     int cluster_migration_barrier; /* Cluster replicas migration barrier. */
     int cluster_allow_replica_migration; /* Automatic replica migrations to orphaned masters and from empty masters */
-    int cluster_slave_validity_factor; /* Slave max data age for failover. */
+    int cluster_slave_validity_factor; /* Slave max data age for failover. */ // failover的从库最大的数据年龄
     int cluster_require_full_coverage; /* If true, put the cluster down if
                                           there is at least an uncovered slot.*/
     int cluster_slave_no_failover;  /* Prevent slave from starting a failover
                                        if the master is in failure state. */
-    char *cluster_announce_ip;  /* IP address to announce on cluster bus. */
+    char *cluster_announce_ip;  /* IP address to announce on cluster bus. */ // 要在群集总线上公布的iP地址
     char *cluster_announce_hostname;  /* hostname to announce on cluster bus. */
     int cluster_preferred_endpoint_type; /* Use the announced hostname when available. */
     int cluster_announce_port;     /* base port to announce on cluster bus. */
     int cluster_announce_tls_port; /* TLS port to announce on cluster bus. */
-    int cluster_announce_bus_port; /* bus port to announce on cluster bus. */
+    int cluster_announce_bus_port; /* bus port to announce on cluster bus. */ // TODO: 总线端口？？？
     int cluster_module_flags;      /* Set of flags that Redis modules are able
                                       to set in order to suppress certain
                                       native Redis Cluster features. Check the

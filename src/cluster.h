@@ -35,12 +35,13 @@ struct clusterNode;
 typedef struct clusterLink {
     mstime_t ctime;             /* Link creation time */
     connection *conn;           /* Connection to remote node */
-    sds sndbuf;                 /* Packet send buffer */
-    char *rcvbuf;               /* Packet reception buffer */
+    sds sndbuf;                 /* Packet send buffer */ // 发送buffer
+    char *rcvbuf;               /* Packet reception buffer */ // 接受buffer
     size_t rcvbuf_len;          /* Used size of rcvbuf */
     size_t rcvbuf_alloc;        /* Allocated size of rcvbuf */
     struct clusterNode *node;   /* Node related to this link. Initialized to NULL when unknown */
     int inbound;                /* 1 if this link is an inbound link accepted from the related node */
+    // 是否是入站连接
 } clusterLink;
 
 /* Cluster node flags and macros. */
@@ -52,7 +53,7 @@ typedef struct clusterLink {
 #define CLUSTER_NODE_HANDSHAKE 32 /* We have still to exchange the first ping */
 #define CLUSTER_NODE_NOADDR   64  /* We don't know the address of this node */
 #define CLUSTER_NODE_MEET 128     /* Send a MEET message to this node */
-#define CLUSTER_NODE_MIGRATE_TO 256 /* Master eligible for replica migration. */
+#define CLUSTER_NODE_MIGRATE_TO 256 /* Master eligible for replica migration. */ // 符合副本迁移条件的主机
 #define CLUSTER_NODE_NOFAILOVER 512 /* Slave will not try to failover. */
 #define CLUSTER_NODE_NULL_NAME "\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000"
 
@@ -66,10 +67,11 @@ typedef struct clusterLink {
 #define nodeCantFailover(n) ((n)->flags & CLUSTER_NODE_NOFAILOVER)
 
 /* Reasons why a slave is not able to failover. */
+// 从库无法执行failover的原因
 #define CLUSTER_CANT_FAILOVER_NONE 0
-#define CLUSTER_CANT_FAILOVER_DATA_AGE 1
-#define CLUSTER_CANT_FAILOVER_WAITING_DELAY 2
-#define CLUSTER_CANT_FAILOVER_EXPIRED 3
+#define CLUSTER_CANT_FAILOVER_DATA_AGE 1 // TODO: 这个flag的含义 
+#define CLUSTER_CANT_FAILOVER_WAITING_DELAY 2 // 还没有到发起failover投票的时间，延缓一下
+#define CLUSTER_CANT_FAILOVER_EXPIRED 3 // 上次选举的过期了，TODO: 是否会发起一个新的选举？？？
 #define CLUSTER_CANT_FAILOVER_WAITING_VOTES 4
 #define CLUSTER_CANT_FAILOVER_RELOG_PERIOD (60*5) /* seconds. */
 
@@ -94,7 +96,7 @@ typedef struct clusterLink {
 #define CLUSTERMSG_TYPE_FAILOVER_AUTH_REQUEST 5 /* May I failover? */
 #define CLUSTERMSG_TYPE_FAILOVER_AUTH_ACK 6     /* Yes, you have my vote */
 #define CLUSTERMSG_TYPE_UPDATE 7        /* Another node slots configuration */
-#define CLUSTERMSG_TYPE_MFSTART 8       /* Pause clients for manual failover */
+#define CLUSTERMSG_TYPE_MFSTART 8       /* Pause clients for manual failover */ // 暂停客户端以进行手动故障切换
 #define CLUSTERMSG_TYPE_MODULE 9        /* Module cluster API message. */
 #define CLUSTERMSG_TYPE_PUBLISHSHARD 10 /* Pub/Sub Publish shard propagation */
 #define CLUSTERMSG_TYPE_COUNT 11        /* Total number of message types. */
@@ -116,7 +118,7 @@ typedef struct clusterNode {
     mstime_t ctime; /* Node object creation time. */
     char name[CLUSTER_NAMELEN]; /* Node name, hex string, sha1-size */
     int flags;      /* CLUSTER_NODE_... */
-    uint64_t configEpoch; /* Last configEpoch observed for this node */
+    uint64_t configEpoch; /* Last configEpoch observed for this node */ // 上次观察到此节点的configEpoch
     unsigned char slots[CLUSTER_SLOTS/8]; /* slots handled by this node */
     uint16_t *slot_info_pairs; /* Slots info represented as (start/end) pair (consecutive index). */
     int slot_info_pairs_count; /* Used number of slots in slot_info_pairs */
@@ -127,22 +129,22 @@ typedef struct clusterNode {
                                     may be NULL even if the node is a slave
                                     if we don't have the master node in our
                                     tables. */
-    mstime_t ping_sent;      /* Unix time we sent latest ping */
+    mstime_t ping_sent;      /* Unix time we sent latest ping */ // 上一次发送ping的时间
     mstime_t pong_received;  /* Unix time we received the pong */
     mstime_t data_received;  /* Unix time we received any data */
     mstime_t fail_time;      /* Unix time when FAIL flag was set */
     mstime_t voted_time;     /* Last time we voted for a slave of this master */
     mstime_t repl_offset_time;  /* Unix time we received offset for this node */
     mstime_t orphaned_time;     /* Starting time of orphaned master condition */
-    long long repl_offset;      /* Last known repl offset for this node. */
+    long long repl_offset;      /* Last known repl offset for this node. */ // 上次了解到的复制偏移
     char ip[NET_IP_STR_LEN];    /* Latest known IP address of this node */
     sds hostname;               /* The known hostname for this node */
     int port;                   /* Latest known clients port (TLS or plain). */
     int pport;                  /* Latest known clients plaintext port. Only used
                                    if the main clients port is for TLS. */
     int cport;                  /* Latest known cluster port of this node. */
-    clusterLink *link;          /* TCP/IP link established toward this node */
-    clusterLink *inbound_link;  /* TCP/IP link accepted from this node */
+    clusterLink *link;          /* TCP/IP link established toward this node */ // 出站连接
+    clusterLink *inbound_link;  /* TCP/IP link accepted from this node */ // 入站连接
     list *fail_reports;         /* List of nodes signaling this as failing */
 } clusterNode;
 
@@ -178,16 +180,18 @@ typedef struct clusterState {
     clusterNode *slots[CLUSTER_SLOTS];
     rax *slots_to_channels;
     /* The following fields are used to take the slave state on elections. */
-    mstime_t failover_auth_time; /* Time of previous or next election. */
-    int failover_auth_count;    /* Number of votes received so far. */
-    int failover_auth_sent;     /* True if we already asked for votes. */
-    int failover_auth_rank;     /* This slave rank for current auth request. */
-    uint64_t failover_auth_epoch; /* Epoch of the current election. */
+    mstime_t failover_auth_time; /* Time of previous or next election. */ // 上次或下次选举的时间
+    int failover_auth_count;    /* Number of votes received so far. */ // 目前为止已经收到的投票数量
+    int failover_auth_sent;     /* True if we already asked for votes. */ // 如果我们已经要求投票，是否已经发送投票请求了
+    int failover_auth_rank;     /* This slave rank for current auth request. */ // 当前身份验证请求的从库级别
+    uint64_t failover_auth_epoch; /* Epoch of the current election. */ // 当前选举的纪元
     int cant_failover_reason;   /* Why a slave is currently not able to
                                    failover. See the CANT_FAILOVER_* macros. */
+                                // 为什么从设备当前无法故障切换。请参阅 CANT_FAILOVER_* 宏
     /* Manual failover state in common. */
-    mstime_t mf_end;            /* Manual failover time limit (ms unixtime).
-                                   It is zero if there is no MF in progress. */
+    // 一般的failover状态
+    mstime_t mf_end;            /* Manual failover time limit (ms unixtime). // failover的时间约束
+                                   It is zero if there is no MF in progress. */ // 如果是0，则代表着没有failover正在进行
     /* Manual failover state of master. */
     clusterNode *mf_slave;      /* Slave performing the manual failover. */
     /* Manual failover state of slave. */
@@ -195,6 +199,7 @@ typedef struct clusterState {
                                    or -1 if still not received. */
     int mf_can_start;           /* If non-zero signal that the manual failover
                                    can start requesting masters vote. */
+                                   // 如果非零信号表明手动故障切换可以开始请求主节点投票
     /* The following fields are used by masters to take state on elections. */
     uint64_t lastVoteEpoch;     /* Epoch of the last vote granted. */
     int todo_before_sleep; /* Things to do in clusterBeforeSleep(). */
@@ -275,6 +280,7 @@ union clusterMsgData {
     /* PING, MEET and PONG */
     struct {
         /* Array of N clusterMsgDataGossip structures */
+        // TODO: 需要学习
         clusterMsgDataGossip gossip[1];
         /* Extension data that can optionally be sent for ping/meet/pong
          * messages. We can't explicitly define them here though, since
@@ -311,22 +317,22 @@ typedef struct {
     uint16_t port;      /* TCP base port number. */
     uint16_t type;      /* Message type */
     uint16_t count;     /* Only used for some kind of messages. */
-    uint64_t currentEpoch;  /* The epoch accordingly to the sending node. */
+    uint64_t currentEpoch;  /* The epoch accordingly to the sending node. */ // TODO: 与configEpoch的区别
     uint64_t configEpoch;   /* The config epoch if it's a master, or the last
                                epoch advertised by its master if it is a
-                               slave. */
+                               slave. */ // 配置历元（如果是主历元），或其主历元（如果是从历元）发布的最后一个历元。
     uint64_t offset;    /* Master replication offset if node is a master or
                            processed replication offset if node is a slave. */
-    char sender[CLUSTER_NAMELEN]; /* Name of the sender node */
+    char sender[CLUSTER_NAMELEN]; /* Name of the sender node */ // 发送者的uuid
     unsigned char myslots[CLUSTER_SLOTS/8];
     char slaveof[CLUSTER_NAMELEN];
     char myip[NET_IP_STR_LEN];    /* Sender IP, if not all zeroed. */
-    uint16_t extensions; /* Number of extensions sent along with this packet. */
-    char notused1[30];   /* 30 bytes reserved for future usage. */
-    uint16_t pport;      /* Sender TCP plaintext port, if base port is TLS */
-    uint16_t cport;      /* Sender TCP cluster bus port */
+    uint16_t extensions; /* Number of extensions sent along with this packet. */ // 随此数据包一起发送的扩展数
+    char notused1[30];   /* 30 bytes reserved for future usage. */ // 30字节扩展
+    uint16_t pport;      /* Sender TCP plaintext port, if base port is TLS */ // 发送方TCP明文端口，如果基本端口为TLS
+    uint16_t cport;      /* Sender TCP cluster bus port */ // 发送方TCP群集总线端口
     uint16_t flags;      /* Sender node flags */
-    unsigned char state; /* Cluster state from the POV of the sender */
+    unsigned char state; /* Cluster state from the POV of the sender */ // 来自发送方POV的群集状态
     unsigned char mflags[3]; /* Message flags: CLUSTERMSG_FLAG[012]_... */
     union clusterMsgData data;
 } clusterMsg;
@@ -366,10 +372,11 @@ static_assert(offsetof(clusterMsg, data) == 2256, "unexpected field offset");
 
 /* Message flags better specify the packet content or are used to
  * provide some information about the node state. */
-#define CLUSTERMSG_FLAG0_PAUSED (1<<0) /* Master paused for manual failover. */
+#define CLUSTERMSG_FLAG0_PAUSED (1<<0) /* Master paused for manual failover. */ // 主库为了failover已经暂停了写入
 #define CLUSTERMSG_FLAG0_FORCEACK (1<<1) /* Give ACK to AUTH_REQUEST even if
-                                            master is up. */
-#define CLUSTERMSG_FLAG0_EXT_DATA (1<<2) /* Message contains extension data */
+                                            master is up. */ // 即使主服务器已启动，也要确认AUTH请求
+                                            // 手动故障切换的时候会指定该flag
+#define CLUSTERMSG_FLAG0_EXT_DATA (1<<2) /* Message contains extension data */ // 消息中包含扩展字段
 
 /* ---------------------- API exported outside cluster.c -------------------- */
 void clusterInit(void);

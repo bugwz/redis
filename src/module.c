@@ -300,6 +300,7 @@ typedef struct RedisModuleKeyspaceSubscriber {
     int event_mask;
     /* Active flag set on entry, to avoid reentrant subscribers
      * calling themselves */
+    // 在条目上设置活动标志，以避免可重入的订阅者调用自己
     int active;
 } RedisModuleKeyspaceSubscriber;
 

@@ -65,7 +65,7 @@ int streamParseIDOrReply(client *c, robj *o, streamID *id, uint64_t missing_seq)
 
 /* Create a new stream data structure. */
 stream *streamNew(void) {
-    stream *s = zmalloc(sizeof(*s));
+    stream *s = zmalloc(sizeof(*s)); // 主要的数据存储结构是一个raxTree
     s->rax = raxNew();
     s->length = 0;
     s->first_id.ms = 0;
@@ -359,6 +359,7 @@ void streamLogListpackContent(unsigned char *lp) {
 
 /* Convert the specified stream entry ID as a 128 bit big endian number, so
  * that the IDs can be sorted lexicographically. */
+// 将指定的流条目ID转换为128位大端数字，以便可以按字典顺序对ID进行排序。
 void streamEncodeID(void *buf, streamID *id) {
     uint64_t e[2];
     e[0] = htonu64(id->ms);
@@ -423,29 +424,39 @@ void streamGetEdgeID(stream *s, int first, int skip_tombstones, streamID *edge_i
  *    current top ID is greater or equal. errno will be set to EDOM.
  * 2. If a size of a single element or the sum of the elements is too big to
  *    be stored into the stream. errno will be set to ERANGE. */
+// 向流“s”中添加一个新项，该项具有在“numfields”中指定的指定数量的字段值对，
+// 并存储到“argv”中。返回填充“added\u ID”结构的新条目ID。
 int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_id, streamID *use_id, int seq_given) {
 
     /* Generate the new entry ID. */
     streamID id;
     if (use_id) {
+        // 如果有传入的id
         if (seq_given) {
+            // 如果给出序列号，则采用传入的序列号
             id = *use_id;
         } else {
             /* The automatically generated sequence can be either zero (new
              * timestamps) or the incremented sequence of the last ID. In the
              * latter case, we need to prevent an overflow/advancing forward
              * in time. */
+            // 自动生成的序列可以是零（新时间戳）或最后一个ID的递增序列。
+            // 在后一种情况下，我们需要防止时间溢出/向前推进。
+            // 如果没给出序列话，则生成新的序列号
             if (s->last_id.ms == use_id->ms) {
+                // 如果传入的时间和上次插入的时间一样，则序列号+1
                 if (s->last_id.seq == UINT64_MAX) {
                     return C_ERR;
                 }
                 id = s->last_id;
                 id.seq++;
             } else {
+                // 否则的话，序列号直接等于0就可以，也就是不需要单独设置序列号了
                 id = *use_id;
             }
         }
     } else {
+        // 如果没有传入的id，则需要自动生成一个id
         streamNextID(&s->last_id,&id);
     }
 
@@ -453,6 +464,8 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
      * or return an error. Automatically generated IDs might
      * overflow (and wrap-around) when incrementing the sequence
        part. */
+    // 检查新ID是否大于最后一个条目ID或返回错误。
+    // 增加序列部分时，自动生成的ID可能溢出（并环绕）。
     if (streamCompareID(&id,&s->last_id) <= 0) {
         errno = EDOM;
         return C_ERR;
@@ -461,6 +474,8 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
     /* Avoid overflow when trying to add an element to the stream (listpack
      * can only host up to 32bit length sttrings, and also a total listpack size
      * can't be bigger than 32bit length. */
+    // 在尝试向流中添加元素时，请避免溢出（listpack最多只能承载32位长度的字符串，并且listpack的总大小不能大于32位长度。
+    // TODO: 为什么listpack的总大小不能大于32位长度？？？
     size_t totelelen = 0;
     for (int64_t i = 0; i < numfields*2; i++) {
         sds ele = argv[i]->ptr;
@@ -476,7 +491,7 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
     raxStart(&ri,s->rax);
     raxSeek(&ri,"$",NULL,0);
 
-    size_t lp_bytes = 0;        /* Total bytes in the tail listpack. */
+    size_t lp_bytes = 0;        /* Total bytes in the tail listpack. */ // 尾部列表包中的总字节数
     unsigned char *lp = NULL;   /* Tail listpack pointer. */
 
     if (!raxEOF(&ri)) {
@@ -489,20 +504,30 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
     /* We have to add the key into the radix tree in lexicographic order,
      * to do so we consider the ID as a single 128 bit number written in
      * big endian, so that the most significant bytes are the first ones. */
-    uint64_t rax_key[2];    /* Key in the radix tree containing the listpack.*/
-    streamID master_id;     /* ID of the master entry in the listpack. */
+    // 我们必须按字典顺序将密钥添加到基数树中，
+    // 为此，我们将ID视为用大端写的单个128位数字，因此最重要的字节是第一个字节。
+    uint64_t rax_key[2];    /* Key in the radix tree containing the listpack.*/ // 输入包含listpack的基数树
+    streamID master_id;     /* ID of the master entry in the listpack. */ // listpack中主条目的ID
 
     /* Create a new listpack and radix tree node if needed. Note that when
      * a new listpack is created, we populate it with a "master entry". This
      * is just a set of fields that is taken as references in order to compress
      * the stream entries that we'll add inside the listpack.
+     * 
+     * 如果需要，创建一个新的listpack和基数树节点。注意，当创建一个新的列表包时，
+     * 我们用“主条目”填充它。这只是一组字段，作为引用，以压缩我们将添加到列表包中的流条目。
      *
      * Note that while we use the first added entry fields to create
      * the master entry, the first added entry is NOT represented in the master
      * entry, which is a stand alone object. But of course, the first entry
      * will compress well because it's used as reference.
      *
+     * 请注意，虽然我们使用第一个添加的条目字段来创建主条目，但第一个添加的条目并不表示在主条目中，
+     * 主条目是一个独立的对象。但当然，第一个条目会很好地压缩，因为它被用作引用。
+     * 
+     * 
      * The master entry is composed like in the following example:
+     * 主条目的组成如以下示例所示：
      *
      * +-------+---------+------------+---------+--/--+---------+---------+-+
      * | count | deleted | num-fields | field_1 | field_2 | ... | field_N |0|
@@ -512,6 +537,9 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
      * entries inside the listpack that are valid, and marked as deleted
      * (deleted flag in the entry flags set). So the total number of items
      * actually inside the listpack (both deleted and not) is count+deleted.
+     * 
+     * count和deleted分别表示listpack中有效并标记为deleted的条目总数（条目标志集中的deleted标志）。
+     * 因此，列表包中实际包含的项目总数（包括已删除和未删除）是count+已删除。
      *
      * The real entries will be encoded with an ID that is just the
      * millisecond and sequence difference compared to the key stored at
@@ -519,14 +547,23 @@ int streamAppendItem(stream *s, robj **argv, int64_t numfields, streamID *added_
      * if the fields of the entry are the same as the master entry fields, the
      * entry flags will specify this fact and the entry fields and number
      * of fields will be omitted (see later in the code of this function).
+     * 
+     * 实际条目将使用一个ID进行编码，该ID与包含listpack（增量编码）的基数树节点上
+     * 存储的密钥相比只是毫秒和序列差，如果条目的字段与主条目字段相同，条目标志将指定这一事实，
+     * 条目字段和字段数将被忽略（请参阅本函数代码的后面部分）。
      *
      * The "0" entry at the end is the same as the 'lp-count' entry in the
      * regular stream entries (see below), and marks the fact that there are
      * no more entries, when we scan the stream from right to left. */
 
+    // 末尾的“0”条目与常规流条目中的“lp count”条目相同（见下文），
+    // 并表明当我们从右向左扫描流时，没有更多条目。
+
     /* First of all, check if we can append to the current macro node or
      * if we need to switch to the next one. 'lp' will be set to NULL if
      * the current node is full. */
+    // 首先，检查是否可以附加到当前宏节点，或者是否需要切换到下一个宏节点。
+    // ”如果当前节点已满，则lp’将设置为NULL。
     if (lp != NULL) {
         size_t node_max_bytes = server.stream_node_max_bytes;
         if (node_max_bytes == 0 || node_max_bytes > STREAM_LISTPACK_MAX_SIZE)
@@ -1852,6 +1889,7 @@ robj *streamTypeLookupWriteOrCreate(client *c, robj *key, int no_create) {
             addReplyNull(c);
             return NULL;
         }
+        // 创建一个新的stream对象
         o = createStreamObject();
         dbAdd(c->db,key,o);
     }
@@ -1939,6 +1977,8 @@ int streamParseIDOrReply(client *c, robj *o, streamID *id, uint64_t missing_seq)
 /* Wrapper for streamGenericParseIDOrReply() with 'strict' argument set to
  * 1, to be used when we want to return an error if the special IDs + or -
  * are provided. */
+// streamGenericParseIDOrReply（）的包装器，参数“strict”设置为1，
+// 当我们想要返回错误时，如果提供了特殊的ID+或-则使用该包装器。
 int streamParseStrictIDOrReply(client *c, robj *o, streamID *id, uint64_t missing_seq, int *seq_given) {
     return streamGenericParseIDOrReply(c,o,id,missing_seq,1,seq_given);
 }
@@ -2004,6 +2044,7 @@ void xaddCommand(client *c) {
     /* Return ASAP if minimal ID (0-0) was given so we avoid possibly creating
      * a new stream and have streamAppendItem fail, leaving an empty key in the
      * database. */
+    // 如果给定了最小ID（0-0），则尽快返回，以避免创建新流，并使streamAppendItem失败，在数据库中留下一个空键。
     if (parsed_args.id_given && parsed_args.seq_given &&
         parsed_args.id.ms == 0 && parsed_args.id.seq == 0)
     {
@@ -2012,19 +2053,25 @@ void xaddCommand(client *c) {
     }
 
     /* Lookup the stream at key. */
+    // 在键处查找流
     robj *o;
     stream *s;
+    // 如果键不存在则会创建一个
     if ((o = streamTypeLookupWriteOrCreate(c,c->argv[1],parsed_args.no_mkstream)) == NULL) return;
     s = o->ptr;
 
     /* Return ASAP if the stream has reached the last possible ID */
+    // 如果流已达到最后一个可能的ID，请尽快返回
     if (s->last_id.ms == UINT64_MAX && s->last_id.seq == UINT64_MAX) {
+        // 流已用完最后一个可能的ID，无法添加更多项
+        // 这种情况通常是由于机器时间有问题导致的，最起码近几百年不会出现这种情况
         addReplyError(c,"The stream has exhausted the last possible ID, "
                         "unable to add more items");
         return;
     }
 
     /* Append using the low level function and return the ID. */
+    // 开始追加元素了
     streamID id;
     if (streamAppendItem(s,c->argv+field_pos,(c->argc-field_pos)/2,
         &id,parsed_args.id_given ? &parsed_args.id : NULL,parsed_args.seq_given) == C_ERR)
@@ -2061,6 +2108,7 @@ void xaddCommand(client *c) {
 
     /* Let's rewrite the ID argument with the one actually generated for
      * AOF/replication propagation. */
+     // 让我们用实际为AOF/复制传播生成的ID参数重写ID参数。
     if (!parsed_args.id_given || !parsed_args.seq_given) {
         robj *idarg = createObject(OBJ_STRING, replyid);
         rewriteClientCommandArgument(c, idpos, idarg);
@@ -2500,6 +2548,7 @@ void streamFreeCG(streamCG *cg) {
 
 /* Lookup the consumer group in the specified stream and returns its
  * pointer, otherwise if there is no such group, NULL is returned. */
+// 查找指定流中的使用者组并返回其指针，否则，如果没有此类组，则返回NULL。
 streamCG *streamLookupCG(stream *s, sds groupname) {
     if (s->cgroups == NULL) return NULL;
     streamCG *cg = raxFind(s->cgroups,(unsigned char*)groupname,
@@ -2812,6 +2861,9 @@ void xsetidCommand(client *c) {
  * Return value of the command is the number of messages successfully
  * acknowledged, that is, the IDs we were actually able to resolve in the PEL.
  */
+// 确认消息已处理。实际上，我们只需检查组的挂起条目列表（PEL），
+// 并从组和消费者中删除PEL条目（挂起的消息在两个位置都被引用）。
+// 该命令的返回值是成功确认的消息数，即我们实际上能够在PEL中解析的ID。
 void xackCommand(client *c) {
     streamCG *group = NULL;
     robj *o = lookupKeyRead(c->db,c->argv[1]);
@@ -2821,6 +2873,7 @@ void xackCommand(client *c) {
     }
 
     /* No key or group? Nothing to ack. */
+    // 没有键或组？无需确认
     if (o == NULL || group == NULL) {
         addReply(c,shared.czero);
         return;
@@ -2830,6 +2883,8 @@ void xackCommand(client *c) {
      * error: the return value of this command cannot be an error in case
      * the client successfully acknowledged some messages, so it should be
      * executed in a "all or nothing" fashion. */
+    // 开始解析ID，以便在出现语法错误时尽快中止：如果客户端成功确认了一些消息，
+    // 则该命令的返回值不能是错误，因此应以“要么全有，要么全无”的方式执行。
     streamID static_ids[STREAMID_STATIC_VECTOR_LEN];
     streamID *ids = static_ids;
     int id_count = c->argc-3;
@@ -2847,6 +2902,7 @@ void xackCommand(client *c) {
         /* Lookup the ID in the group PEL: it will have a reference to the
          * NACK structure that will have a reference to the consumer, so that
          * we are able to remove the entry from both PELs. */
+        // 查找组PEL中的ID：它将引用NACK结构，该结构将引用消费者，因此我们能够从两个PEL中删除条目。
         streamNACK *nack = raxFind(group->pel,buf,sizeof(buf));
         if (nack != raxNotFound) {
             raxRemove(group->pel,buf,sizeof(buf),NULL);

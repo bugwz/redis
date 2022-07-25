@@ -585,6 +585,20 @@ void latencyCommandReplyWithLatestEvents(client *c) {
     dictReleaseIterator(di);
 }
 
+/*
+最终展示的信息为：
+
+command - high 4002 ms, low 1001 ms (all time high 4002 ms)
+--------------------------------------------------------------------------------
+   #
+  #|
+ o||
+_|||__
+
+888142
+mmm1ss
+   s
+*/
 #define LATENCY_GRAPH_COLS 80
 sds latencyCommandGenSparkeline(char *event, struct latencyTimeSeries *ts) {
     int j;
